@@ -3,8 +3,13 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct Graph {
     new_id: u32,
-    values: HashMap<NodeId, String>,
-    adjlist: HashMap<NodeId, Vec<NodeId>>,
+    nodes: HashMap<NodeId, NodeData>,
+}
+
+#[derive(Debug)]
+struct NodeData {
+    value: String,
+    neighbors: Vec<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,25 +26,29 @@ pub struct NodeId {
 impl Graph {
     /// Constructs a new  graph. To call this function use `Graph::new()`.
     pub fn new() -> Graph {
-        return Graph {
+        Graph {
             new_id: 0,
-            values: HashMap::new(),
-            adjlist: HashMap::new(),
-        };
+            nodes: HashMap::new(),
+        }
     }
 
     /// Adds a node to the graph with the given value, returning a unique id
     pub fn add(self: &mut Graph, value: String) -> NodeId {
         let curr_node = NodeId { id: self.new_id };
-        self.values.insert(curr_node, value);
-        self.adjlist.insert(curr_node, Vec::new());
+        self.nodes.insert(
+            curr_node,
+            NodeData {
+                value,
+                neighbors: Vec::new(),
+            },
+        );
         self.new_id += 1;
-        return curr_node;
+        curr_node
     }
 
     /// Returns true if the graph contains the given id
     pub fn contains(self: &Graph, id: NodeId) -> bool {
-        return self.values.contains_key(&id);
+        self.nodes.contains_key(&id)
     }
 
     /// Removes a node from the graph, as well as any edges associated with it
@@ -49,26 +58,22 @@ impl Graph {
         }
 
         // remove incoming edges
-        for node in self.ids() {
-            let neighbors = self.adjlist.get_mut(&node).unwrap();
-            neighbors.retain(|&x| x != id);
+        for other_node in self.nodes.values_mut() {
+            other_node.neighbors.retain(|&x| x != id);
         }
 
         // remove from the graph (and outgoing edges)
-        self.values.remove(&id);
-        self.adjlist.remove(&id);
+        self.nodes.remove(&id);
     }
 
     /// Immutably borrows the value stored in a node
     pub fn value(self: &Graph, id: NodeId) -> &String {
-        let value = self.values.get(&id);
-        return value.unwrap(); // will panic if doesn't exist
+        &self.nodes.get(&id).unwrap().value
     }
 
     /// Mutably borrows the value stored in a node
     pub fn value_mut(self: &mut Graph, id: NodeId) -> &mut String {
-        let value = self.values.get_mut(&id);
-        return value.unwrap();
+        &mut self.nodes.get_mut(&id).unwrap().value
     }
 
     /// Adds a directed edge from the `from` node to the `to` node (if it doesn't exist)
@@ -77,11 +82,16 @@ impl Graph {
             panic!("node does not exist");
         }
 
-        if !self.adjlist.get(&from).unwrap().contains(&to) {
-            self.adjlist.get_mut(&from).unwrap().push(to);
-        } else if from == to {
-            panic!("self multi edge not allowed");
+        let neighbors = &mut self.nodes.get_mut(&from).unwrap().neighbors;
+
+        if neighbors.contains(&to) {
+            if from == to {
+                panic!("self multi edge not allowed");
+            }
+            return;
         }
+
+        neighbors.push(to);
     }
 
     /// Removes a directed edge from the `from` node to the `to` node (if it exists)
@@ -90,17 +100,20 @@ impl Graph {
             panic!("node does not exist");
         }
 
-        self.adjlist.get_mut(&from).unwrap().retain(|x| *x != to);
+        self.nodes
+            .get_mut(&from)
+            .unwrap()
+            .neighbors
+            .retain(|&x| x != to);
     }
 
     /// Returns a list of (valid) node ids present in the graph
     pub fn ids(self: &Graph) -> Vec<NodeId> {
-        return self.values.keys().cloned().collect();
+        self.nodes.keys().cloned().collect()
     }
 
     /// Returns the list of (out) neighbors of a node
     pub fn neighbors(self: &Graph, id: NodeId) -> Vec<NodeId> {
-        let neighbors = self.adjlist.get(&id);
-        return neighbors.unwrap().clone();
+        self.nodes.get(&id).unwrap().neighbors.clone()
     }
 }
