@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::{
     storage::{Storage, StorageMut},
     types::{ColId, RowId},
@@ -93,33 +95,63 @@ impl<T: Default> Col<T> {
 
 impl<T> Storage<T> for Col<T> {
     // TODO: specify associated types
-    type Id = ();
+    type Id = RowId;
     type Ref<'a>
-        = ()
+        = &'a T
     where
         Self: 'a;
 
-    fn get(&self, id: ()) -> Option<()> {
-        unimplemented!()
+    fn get<'a>(&'a self, id: Self::Id) -> Option<Self::Ref<'a>> {
+        if self.occupied.get(id.idx) == Some(true) {
+            self.data.get(id.idx)
+        } else {
+            None
+        }
     }
 }
 
-impl<T> StorageMut<T> for Col<T> {
+impl<T: Default> StorageMut<T> for Col<T> {
     // TODO: specify associated types
     type RefMut<'a>
-        = ()
+        = &'a mut T
     where
         Self: 'a;
 
-    fn get_mut(&mut self, id: ()) -> Option<()> {
-        unimplemented!()
+    fn get_mut<'a>(&'a mut self, id: Self::Id) -> Option<Self::RefMut<'a>> {
+        if self.occupied.get(id.idx) == Some(true) {
+            self.data.get_mut(id.idx)
+        } else {
+            None
+        }
     }
 
-    fn put(&mut self, id: (), val: impl Into<T>) -> Option<T> {
-        unimplemented!()
+    fn put(&mut self, id: Self::Id, val: impl Into<T>) -> Option<T> {
+        if id.idx >= self.data.len() {
+            self.extend_with_null(id.idx);
+        }
+
+        let was_occupied = self.occupied.get(id.idx).unwrap_or(false);
+
+        self.occupied.set(id.idx, true);
+
+        let mut new_val = val.into();
+
+        mem::swap(&mut self.data[id.idx], &mut new_val);
+
+        if was_occupied { Some(new_val) } else { None }
     }
 
-    fn take(&mut self, id: ()) -> Option<T> {
-        unimplemented!()
+    fn take(&mut self, id: Self::Id) -> Option<T> {
+        if id.idx >= self.data.len() {
+            self.extend_with_null(id.idx);
+        } // this is maybe unnecessary and could just be an early return
+
+        let was_occupied = self.occupied.get(id.idx).unwrap_or(false);
+
+        self.occupied.set(id.idx, false);
+
+        let old_val = mem::take(&mut self.data[id.idx]);
+
+        if was_occupied { Some(old_val) } else { None }
     }
 }
