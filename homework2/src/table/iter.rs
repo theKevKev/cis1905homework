@@ -7,7 +7,7 @@ use crate::{
         Table,
         view::{ColMut, ColRef, RowMut, RowRef},
     },
-    types::{ColId, DbMut, DbRef, RowId},
+    types::{ColId, DbMut, DbRef, DbType, RowId},
 };
 
 /// Defines iterator helper functions for a table. This lets us iterate over logical rows and
@@ -66,24 +66,71 @@ impl TableIter for Table {
             .map(|row_id| self.row(row_id))
     }
     fn iter_cols<'a>(&'a self) -> impl Iterator<Item = ColRef<'a>> {
-        let iter_strings = self.strings.iter().map(ColRef::String);
-        let iter_integers = self.integers.iter().map(ColRef::Integer);
-        let iter_booleans = self.booleans.iter().map(ColRef::Boolean);
-        let iter_doubles = self.doubles.iter().map(ColRef::Double);
+        // let iter_strings = self.strings.iter().map(ColRef::String);
+        // let iter_integers = self.integers.iter().map(ColRef::Integer);
+        // let iter_booleans = self.booleans.iter().map(ColRef::Boolean);
+        // let iter_doubles = self.doubles.iter().map(ColRef::Double);
 
-        iter_strings
-            .chain(iter_integers)
-            .chain(iter_booleans)
-            .chain(iter_doubles)
+        // iter_strings
+        //     .chain(iter_integers)
+        //     .chain(iter_booleans)
+        //     .chain(iter_doubles)
+
+        self.id_map.values().map(|id| self.col(*id))
+        // note here: I got super confused why the above (commented) implementation was not working on gradescope and multiple columns were appearing
+        // so I asked Claude which told me that due to csv.rs copying columns when switching them from string to other types, they were showing up twice in my iterators (one as string, one as not string)
+        // while this function was easier to fix given that information, iter_cols_mut became very complex to fix and required moves along with create separate checks for which ids were valid
+        // so I received a lot of AI help for that function which is why it looks as complex as it does.
     }
 }
 
 impl TableIterMut for Table {
     fn iter_cols_mut<'a>(&'a mut self) -> impl Iterator<Item = ColMut<'a>> {
-        let iter_strings = self.strings.iter_mut().map(ColMut::String);
-        let iter_integers = self.integers.iter_mut().map(ColMut::Integer);
-        let iter_booleans = self.booleans.iter_mut().map(ColMut::Boolean);
-        let iter_doubles = self.doubles.iter_mut().map(ColMut::Double);
+        let valid_strings: Vec<usize> = self
+            .id_map
+            .values()
+            .filter(|id| id.ty == DbType::String)
+            .map(|id| id.idx)
+            .collect();
+        let valid_integers: Vec<usize> = self
+            .id_map
+            .values()
+            .filter(|id| id.ty == DbType::Integer)
+            .map(|id| id.idx)
+            .collect();
+        let valid_booleans: Vec<usize> = self
+            .id_map
+            .values()
+            .filter(|id| id.ty == DbType::Boolean)
+            .map(|id| id.idx)
+            .collect();
+        let valid_doubles: Vec<usize> = self
+            .id_map
+            .values()
+            .filter(|id| id.ty == DbType::Double)
+            .map(|id| id.idx)
+            .collect();
+
+        let iter_strings = self
+            .strings
+            .iter_mut()
+            .filter(move |col| valid_strings.contains(&col.id().idx))
+            .map(ColMut::String);
+        let iter_integers = self
+            .integers
+            .iter_mut()
+            .filter(move |col| valid_integers.contains(&col.id().idx))
+            .map(ColMut::Integer);
+        let iter_booleans = self
+            .booleans
+            .iter_mut()
+            .filter(move |col| valid_booleans.contains(&col.id().idx))
+            .map(ColMut::Boolean);
+        let iter_doubles = self
+            .doubles
+            .iter_mut()
+            .filter(move |col| valid_doubles.contains(&col.id().idx))
+            .map(ColMut::Double);
 
         iter_strings
             .chain(iter_integers)
