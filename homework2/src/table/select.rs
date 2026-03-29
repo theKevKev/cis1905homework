@@ -142,7 +142,46 @@ impl Filter {
 impl Filter {
     /// Returns `true` if the data should be kept and `false` if it should be filtered.
     pub fn apply<'a>(&'a self, row: RowRef<'a>) -> bool {
-        unimplemented!();
+        let check_equal = |col_id: &ColId, value: &DbVal| -> bool {
+            match row.table.get((row.id, *col_id)) {
+                None => false,
+                Some(val) => val.to_owned() == *value,
+            }
+        };
+
+        let check_greater_than = |col_id: &ColId, value: &DbVal| -> bool {
+            match row.table.get((row.id, *col_id)) {
+                None => false,
+                Some(val) => match (val, value) {
+                    (DbRef::String(a), DbVal::String(b)) => a > b.as_str(),
+                    (DbRef::Integer(a), DbVal::Integer(b)) => a > b,
+                    (DbRef::Boolean(a), DbVal::Boolean(b)) => a > b,
+                    (DbRef::Double(a), DbVal::Double(b)) => a > b,
+                    _ => panic!("filter: type mismatch"),
+                },
+            }
+        };
+
+        match self {
+            Filter::IsNonNull(col_id) => row.table.get((row.id, *col_id)).is_some(),
+            Filter::IsNull(col_id) => row.table.get((row.id, *col_id)).is_none(),
+
+            Filter::Eq(col_id, value) => check_equal(col_id, value),
+            Filter::Ne(col_id, value) => !check_equal(col_id, value),
+            Filter::Gt(col_id, value) => check_greater_than(col_id, value),
+            Filter::Lt(col_id, value) => {
+                !check_greater_than(col_id, value) && !check_equal(col_id, value)
+            }
+            Filter::Ge(col_id, value) => {
+                check_greater_than(col_id, value) || check_equal(col_id, value)
+            }
+            Filter::Le(col_id, value) => !check_greater_than(col_id, value),
+
+            Filter::And(a, b) => a.apply(row) && b.apply(row),
+            Filter::Or(a, b) => a.apply(row) || b.apply(row),
+            Filter::Xor(a, b) => a.apply(row) ^ b.apply(row),
+            Filter::Not(a) => !a.apply(row),
+        }
     }
 }
 
@@ -169,8 +208,49 @@ pub struct TableViewMut<'a> {
 // and `select_mut` operations.
 
 impl Table {
+    fn comparator(a_opt: Option<DbRef>, b_opt: Option<DbRef>) -> Ordering {
+        match (a_opt, b_opt) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(a), Some(b)) => match (a, b) {
+                (DbRef::String(x), DbRef::String(y)) => x.cmp(y),
+                (DbRef::Integer(x), DbRef::Integer(y)) => x.cmp(y),
+                (DbRef::Boolean(x), DbRef::Boolean(y)) => x.cmp(y),
+                (DbRef::Double(x), DbRef::Double(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+                _ => panic!("Type Mismatch in Comparator"),
+            },
+        }
+    }
     pub fn select_helper(&self, select: Select) -> (Vec<ColId>, Vec<RowId>) {
-        unimplemented!();
+        // Filtering
+        let mut row_ids = Vec::new();
+        for row in self.iter_rows() {
+            let keep = match &select.filter {
+                None => true,
+                Some(filter) => filter.apply(row),
+            };
+            if keep {
+                row_ids.push(row.id);
+            }
+        }
+
+        // Sorting
+        for order_by in select.order_by.iter().rev() {
+            row_ids.sort_by(|&a, &b| {
+                let col = order_by.col;
+                let value_a = self.get((a, col));
+                let value_b = self.get((b, col));
+                let comparison = Table::comparator(value_a, value_b);
+                if order_by.order == Order::Ascending {
+                    comparison
+                } else {
+                    comparison.reverse()
+                }
+            });
+        }
+
+        (select.cols, row_ids)
     }
     pub fn select<'a>(&'a self, select: Select) -> TableView<'a> {
         let (col_ids, row_ids) = self.select_helper(select);
@@ -194,29 +274,26 @@ impl Table {
 
 impl<'a> TableIter for TableView<'a> {
     fn iter_rows<'b>(&'b self) -> impl Iterator<Item = RowRef<'b>> {
-        unimplemented!();
-        std::iter::empty()
+        self.row_ids.iter().map(|id| self.table.row(*id))
     }
     fn iter_cols<'b>(&'b self) -> impl Iterator<Item = view::ColRef<'b>> {
-        unimplemented!();
-        std::iter::empty()
+        self.col_ids.iter().map(|id| self.table.col(*id))
     }
 }
 impl<'a> TableIter for TableViewMut<'a> {
     fn iter_rows<'b>(&'b self) -> impl Iterator<Item = RowRef<'b>> {
-        unimplemented!();
-        std::iter::empty()
+        self.row_ids.iter().map(|id| self.table.row(*id))
     }
     fn iter_cols<'b>(&'b self) -> impl Iterator<Item = view::ColRef<'b>> {
-        unimplemented!();
-        std::iter::empty()
+        self.col_ids.iter().map(|id| self.table.col(*id))
     }
 }
 
 impl<'a> TableIterMut for TableViewMut<'a> {
     fn iter_cols_mut<'b>(&'b mut self) -> impl Iterator<Item = view::ColMut<'b>> {
-        unimplemented!();
-        std::iter::empty()
+        self.table
+            .iter_cols_mut()
+            .filter(|x| self.col_ids.contains(&x.id()))
     }
 }
 

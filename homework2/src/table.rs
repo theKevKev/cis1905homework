@@ -142,7 +142,32 @@ impl Storage<DbVal> for Table {
     type Ref<'a> = DbRef<'a>;
 
     fn get<'a>(&'a self, id: (RowId, ColId)) -> Option<DbRef<'a>> {
-        unimplemented!()
+        let (row_id, col_id) = id;
+        match col_id.ty {
+            DbType::String => {
+                // check in bounds
+                let col = self.strings.get(col_id.idx)?;
+                // grab value
+                let val = col.get(row_id)?;
+                // cast to DbRef
+                Some(DbRef::from(val))
+            }
+            DbType::Integer => {
+                let col = self.integers.get(col_id.idx)?;
+                let val = col.get(row_id)?;
+                Some(DbRef::from(val))
+            }
+            DbType::Boolean => {
+                let col = self.booleans.get(col_id.idx)?;
+                let val = col.get(row_id)?;
+                Some(DbRef::from(val))
+            }
+            DbType::Double => {
+                let col = self.doubles.get(col_id.idx)?;
+                let val = col.get(row_id)?;
+                Some(DbRef::from(val))
+            }
+        }
     }
 }
 
@@ -150,15 +175,83 @@ impl StorageMut<DbVal> for Table {
     type RefMut<'a> = DbMut<'a>;
 
     fn get_mut<'a>(&'a mut self, id: (RowId, ColId)) -> Option<DbMut<'a>> {
-        unimplemented!()
+        let (row_id, col_id) = id;
+        match col_id.ty {
+            DbType::String => {
+                let col = self.strings.get_mut(col_id.idx)?;
+                let val = col.get_mut(row_id)?;
+                Some(DbMut::from(val))
+            }
+            DbType::Integer => {
+                let col = self.integers.get_mut(col_id.idx)?;
+                let val = col.get_mut(row_id)?;
+                Some(DbMut::from(val))
+            }
+            DbType::Boolean => {
+                let col = self.booleans.get_mut(col_id.idx)?;
+                let val = col.get_mut(row_id)?;
+                Some(DbMut::from(val))
+            }
+            DbType::Double => {
+                let col = self.doubles.get_mut(col_id.idx)?;
+                let val = col.get_mut(row_id)?;
+                Some(DbMut::from(val))
+            }
+        }
     }
 
     fn put(&mut self, id: (RowId, ColId), val: impl Into<DbVal>) -> Option<DbVal> {
-        unimplemented!()
+        let (row_id, col_id) = id;
+
+        match col_id.ty {
+            DbType::String => {
+                let col = self.strings.get_mut(col_id.idx)?;
+                let prev = col.put(row_id, val.into().into_string())?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Integer => {
+                let col = self.integers.get_mut(col_id.idx)?;
+                let prev = col.put(row_id, val.into().into_integer())?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Boolean => {
+                let col = self.booleans.get_mut(col_id.idx)?;
+                let prev = col.put(row_id, val.into().into_boolean())?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Double => {
+                let col = self.doubles.get_mut(col_id.idx)?;
+                let prev = col.put(row_id, val.into().into_double())?;
+                Some(DbVal::from(prev))
+            }
+        }
     }
 
     fn take(&mut self, id: (RowId, ColId)) -> Option<DbVal> {
-        unimplemented!()
+        let (row_id, col_id) = id;
+
+        match col_id.ty {
+            DbType::String => {
+                let col = self.strings.get_mut(col_id.idx)?;
+                let prev = col.take(row_id)?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Integer => {
+                let col = self.integers.get_mut(col_id.idx)?;
+                let prev = col.take(row_id)?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Boolean => {
+                let col = self.booleans.get_mut(col_id.idx)?;
+                let prev = col.take(row_id)?;
+                Some(DbVal::from(prev))
+            }
+            DbType::Double => {
+                let col = self.doubles.get_mut(col_id.idx)?;
+                let prev = col.take(row_id)?;
+                Some(DbVal::from(prev))
+            }
+        }
     }
 }
 
