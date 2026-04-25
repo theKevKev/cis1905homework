@@ -23,17 +23,34 @@ pub(crate) struct Board {
 impl Board {
     pub(crate) fn new() -> Self {
         Board {
-            walls: Walls { walls_above: 0, walls_right: 0, corners: 0 },
-            white: PlayerStatus { position_idx: 4, walls_remaining: 10 },
-            black: PlayerStatus { position_idx: 76, walls_remaining: 10 },
+            walls: Walls {
+                walls_above: 0,
+                walls_right: 0,
+                corners: 0,
+            },
+            white: PlayerStatus {
+                position_idx: 4,
+                walls_remaining: 10,
+            },
+            black: PlayerStatus {
+                position_idx: 76,
+                walls_remaining: 10,
+            },
         }
     }
 
-    pub(crate) fn walls_above_bits(&self) -> u128 { self.walls.walls_above }
-    pub(crate) fn walls_right_bits(&self) -> u128 { self.walls.walls_right }
-    pub(crate) fn white_pos(&self) -> PositionIndex { self.white.position_idx }
-    pub(crate) fn black_pos(&self) -> PositionIndex { self.black.position_idx }
-    pub(crate) fn 
+    pub(crate) fn white_pos(&self) -> PositionIndex {
+        self.white.position_idx
+    }
+    pub(crate) fn black_pos(&self) -> PositionIndex {
+        self.black.position_idx
+    }
+    pub(crate) fn white_walls_remaining(&self) -> u8 {
+        self.white.walls_remaining
+    }
+    pub(crate) fn black_walls_remaining(&self) -> u8 {
+        self.black.walls_remaining
+    }
 }
 
 impl Board {
