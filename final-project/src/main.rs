@@ -1,45 +1,37 @@
-mod game;
 mod ai;
+mod game;
 mod ui;
 
-use crossterm::{
-    event::{self, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 
-use game::board::Board;
+use game::r#move::Move;
+use game::state::{check_result, GameResult, Player};
+use ui::app::{setup_terminal, teardown_terminal, wait_for_quit_signal};
+use ui::human::Human;
 use ui::terminal_visualizer::{draw_board, GameState};
 
 fn main() -> io::Result<()> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = setup_terminal()?;
+    let mut state = GameState::new();
+    let mut players: [Box<dyn Player>; 2] = [Box::new(Human), Box::new(Human)];
 
-    let state = GameState {
-        board: Board::new(),
-        is_white_turn: true,
-        white_walls: vec![],
-        black_walls: vec![],
-    };
-
-    loop {
+    'game: loop {
         terminal.draw(|f| draw_board(f, f.area(), &state))?;
 
-        if event::poll(std::time::Duration::from_millis(250))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    break;
-                }
-            }
+        if !matches!(check_result(&state.board), GameResult::InProgress) {
+            wait_for_quit_signal()?;
+            break 'game;
         }
+
+        let turn = if state.is_white_turn { 0 } else { 1 };
+        let mv = players[turn].get_move(&state.board, state.is_white_turn);
+
+        state.board.make_move(state.is_white_turn, mv);
+        if matches!(mv, Move::Wall { .. }) {
+            state.record_wall(mv, state.is_white_turn);
+        }
+        state.is_white_turn = !state.is_white_turn;
     }
 
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    disable_raw_mode()?;
-    Ok(())
+    teardown_terminal(&mut terminal)
 }
