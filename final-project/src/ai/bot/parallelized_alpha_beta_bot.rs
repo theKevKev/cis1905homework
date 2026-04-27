@@ -120,14 +120,14 @@ impl<E: Evaluator + Sync> ParallelAlphaBetaBot<E> {
             return if is_white { alpha } else { beta };
         }
 
-        if depth == 0 {
-            return self.evaluator.eval(board, is_white);
-        }
         let result: GameResult = board.check_result();
         match result {
-            GameResult::WhiteWins => return i32::MAX,
-            GameResult::BlackWins => return i32::MIN,
+            GameResult::WhiteWins => return 10_000 + depth as i32,
+            GameResult::BlackWins => return -10_000 - depth as i32,
             _ => {}
+        }
+        if depth == 0 {
+            return self.evaluator.eval(board, is_white);
         }
 
         let moves = board.get_available_candidate_moves(is_white);
