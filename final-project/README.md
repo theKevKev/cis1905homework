@@ -1,6 +1,6 @@
 # Quoridor AI
 
-A fully-playable terminal implementation of [Quoridor](https://en.wikipedia.org/wiki/Quoridor) with a suite of AI bots, written in Rust. Supports human-vs-human, human-vs-bot, and bot-vs-bot play, rendered in the terminal via `ratatui`.
+A fully-playable terminal implementation of [Quoridor](https://en.wikipedia.org/wiki/Quoridor) with a suite of AI bots, written in Rust. Supports human-vs-human, human-vs-bot, and bot-vs-bot play, rendered in the terminal via `ratatui`. Slideshow linked here: [Google Slides](https://docs.google.com/presentation/d/12a-Bhgr4o9ashFwgKOv5B9sAN5-ewZYysqfUeKaKHSQ/edit?usp=sharing)
 
 ---
 
