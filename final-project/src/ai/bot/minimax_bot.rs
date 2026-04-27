@@ -76,14 +76,14 @@ impl<E: Evaluator> MiniMaxBot<E> {
         #[cfg(debug_assertions)]
         NODES.with(|n| n.set(n.get() + 1));
 
-        if depth == 0 {
-            return self.evaluator.eval(board, is_white);
-        }
         let result: GameResult = board.check_result();
         match result {
-            GameResult::WhiteWins => return i32::MAX,
-            GameResult::BlackWins => return i32::MIN,
+            GameResult::WhiteWins => return i32::MAX - 200 + depth as i32,
+            GameResult::BlackWins => return i32::MIN + 200 - depth as i32,
             _ => {}
+        }
+        if depth == 0 {
+            return self.evaluator.eval(board, is_white);
         }
 
         let moves = board.get_available_candidate_moves(is_white);

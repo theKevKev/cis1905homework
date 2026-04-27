@@ -5,8 +5,11 @@ mod ui;
 use std::io;
 
 use ai::bot::{
-    alpha_beta_bot::AlphaBetaBot, minimax_bot::MiniMaxBot,
-    parallelized_alpha_beta_bot::ParallelAlphaBetaBot, random_bot::RandomBot,
+    alpha_beta_bot::AlphaBetaBot,
+    minimax_bot::MiniMaxBot,
+    parallel_TT_bot::ParallelTTBot,
+    parallelized_alpha_beta_bot::ParallelAlphaBetaBot,
+    random_bot::RandomBot,
 };
 use ai::evalulator::{BaseEvaluator, SimpleEvaluator, UrgentEvaluator};
 
@@ -89,6 +92,14 @@ fn make_player(s: &str) -> Box<dyn Player> {
             _ => Box::new(AlphaBetaBot::new(depth, SimpleEvaluator::new())),
         };
     }
+    if let Some(rest) = s.strip_prefix("ptt") {
+        let (depth, eval) = parse_depth_eval(rest, "ptt");
+        return match eval {
+            "base" => Box::new(ParallelTTBot::new(depth, BaseEvaluator::new(), 22)),
+            "urgent" => Box::new(ParallelTTBot::new(depth, UrgentEvaluator::new(), 22)),
+            _ => Box::new(ParallelTTBot::new(depth, SimpleEvaluator::new(), 22)),
+        };
+    }
     if let Some(rest) = s.strip_prefix("p") {
         let (depth, eval) = parse_depth_eval(rest, "p");
         return match eval {
@@ -98,7 +109,7 @@ fn make_player(s: &str) -> Box<dyn Player> {
         };
     }
     panic!(
-        "unknown player '{}' — use human, random, mm<n>[base|simple|urgent], or ab<n>[base|simple|urgent]",
+        "unknown player '{}' — use human, random, mm<n>[eval], ab<n>[eval], p<n>[eval], ptt<n>[eval]",
         s
     );
 }
@@ -106,6 +117,7 @@ fn make_player(s: &str) -> Box<dyn Player> {
 #[cfg(test)]
 mod bench {
     use crate::ai::bot::minimax_bot::MiniMaxBot;
+    use crate::ai::bot::parallel_TT_bot::ParallelTTBot;
     use crate::ai::bot::parallelized_alpha_beta_bot::ParallelAlphaBetaBot;
     use crate::ai::{bot::alpha_beta_bot::AlphaBetaBot, evalulator::SimpleEvaluator};
     use crate::game::board::Board;
@@ -123,55 +135,56 @@ mod bench {
         d.as_secs_f64() * 1000.0
     }
 
+    fn fmt_ms(d: Option<Duration>, width: usize) -> String {
+        match d {
+            Some(d) => format!("{:>width$.2}", ms(d)),
+            None => format!("{:>width$}", "(skipped)"),
+        }
+    }
+
+    fn fmt_speedup(num: Option<Duration>, den: Option<Duration>, width: usize) -> String {
+        match (num, den) {
+            (Some(n), Some(d)) => format!("{:>width$.1}x", ms(n) / ms(d)),
+            _ => format!("{:>width$}", "-"),
+        }
+    }
+
     fn run_table(label: &str, board: &Board) {
         println!("\n-- {} (black to move) --", label);
         println!(
-            "{:<7} {:>13} {:>15} {:>14} {:>10} {:>10}",
-            "depth", "minimax (ms)", "alpha-beta (ms)", "par-ab (ms)", "mm/ab", "ab/par"
+            "{:<7} {:>13} {:>15} {:>12} {:>12} {:>9} {:>9} {:>9}",
+            "depth", "minimax (ms)", "alpha-beta (ms)", "par-ab (ms)", "par-tt (ms)",
+            "mm/ab", "ab/par", "par/tt"
         );
-        println!("{}", "-".repeat(75));
+        println!("{}", "-".repeat(92));
         for depth in 1u8..=7 {
             let mm = if depth <= 4 {
-                Some(time_bot(
-                    &mut MiniMaxBot::new(depth, SimpleEvaluator::new()),
-                    board,
-                    false,
-                ))
+                Some(time_bot(&mut MiniMaxBot::new(depth, SimpleEvaluator::new()), board, false))
             } else {
                 None
             };
             let ab = if depth <= 5 {
-                Some(time_bot(
-                    &mut AlphaBetaBot::new(depth, SimpleEvaluator::new()),
-                    board,
-                    false,
-                ))
+                Some(time_bot(&mut AlphaBetaBot::new(depth, SimpleEvaluator::new()), board, false))
             } else {
                 None
             };
-            let par = time_bot(
-                &mut ParallelAlphaBetaBot::new(depth, SimpleEvaluator::new()),
+            let par =
+                time_bot(&mut ParallelAlphaBetaBot::new(depth, SimpleEvaluator::new()), board, false);
+            let ptt = time_bot(
+                &mut ParallelTTBot::new(depth, SimpleEvaluator::new(), 22),
                 board,
                 false,
             );
-            let par_ms = ms(par);
-            let ab_str = ab
-                .map(|d| format!("{:>15.2}", ms(d)))
-                .unwrap_or_else(|| format!("{:>15}", "(skipped)"));
-            let mm_str = mm
-                .map(|d| format!("{:>13.2}", ms(d)))
-                .unwrap_or_else(|| format!("{:>13}", "(skipped)"));
-            let mm_ab_str = match (mm, ab) {
-                (Some(m), Some(a)) => format!("{:>9.1}x", ms(m) / ms(a)),
-                _ => format!("{:>10}", "-"),
-            };
-            let ab_par_str = match ab {
-                Some(a) => format!("{:>9.1}x", ms(a) / par_ms),
-                None => format!("{:>10}", "-"),
-            };
             println!(
-                "{:<7} {} {} {:>14.2} {} {}",
-                depth, mm_str, ab_str, par_ms, mm_ab_str, ab_par_str
+                "{:<7} {} {} {} {} {} {} {}",
+                depth,
+                fmt_ms(mm, 13),
+                fmt_ms(ab, 15),
+                fmt_ms(Some(par), 12),
+                fmt_ms(Some(ptt), 12),
+                fmt_speedup(mm, ab, 9),
+                fmt_speedup(ab, Some(par), 9),
+                fmt_speedup(Some(par), Some(ptt), 9),
             );
         }
     }
