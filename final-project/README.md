@@ -53,6 +53,12 @@ Append directly after the depth (e.g. `ab5urgent`). Defaults to `simple` if omit
 | `e5v` | Place vertical wall at corner e5   |
 | `Esc` | Quit                               |
 
+### Endgame
+
+Upon a player winning, you can press `Enter` to gracefully close the program.
+
+Known bug: Sometimes the bots will choose not to win immediately and "flaunt" their win, unfortunately you may just have to kill that shell.
+
 ---
 
 ## Screenshots
