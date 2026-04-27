@@ -1,9 +1,9 @@
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{self, Stdout};
 
 pub fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
@@ -24,7 +24,7 @@ pub fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> i
 pub fn wait_for_quit_signal() -> io::Result<()> {
     loop {
         if let Event::Key(k) = event::read()? {
-            if k.code == KeyCode::Enter || k.code == KeyCode::Char('q') {
+            if k.code == KeyCode::Enter || k.code == KeyCode::Char('q') || k.code == KeyCode::Esc {
                 return Ok(());
             }
         }

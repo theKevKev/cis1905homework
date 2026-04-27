@@ -4,12 +4,12 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, Clear, ClearType, LeaveAlternateScreen},
+    terminal::{Clear, ClearType, LeaveAlternateScreen, disable_raw_mode},
 };
 
 use crate::game::board::Board;
 use crate::game::r#move::{Move, Orientation};
-use crate::game::state::Player;
+use crate::game::player::Player;
 
 pub struct Human;
 

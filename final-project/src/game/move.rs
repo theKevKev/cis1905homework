@@ -1,5 +1,6 @@
 use super::board::{Board, PositionIndex};
 use arrayvec::ArrayVec;
+use std::fmt; // does this go away in release mode
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Orientation {
@@ -17,6 +18,32 @@ pub(crate) enum Move {
         corner_idx: u8,
         orientation: Orientation,
     },
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Move::Pawn { to, .. } => {
+                write!(f, "{}{}", (b'a' + to % 9) as char, (b'1' + to / 9) as char)
+            }
+            Move::Wall {
+                corner_idx,
+                orientation,
+            } => {
+                write!(
+                    f,
+                    "{}{}{}",
+                    (b'a' + corner_idx % 8) as char,
+                    (b'1' + corner_idx / 8) as char,
+                    if orientation == Orientation::Horizontal {
+                        'h'
+                    } else {
+                        'v'
+                    }
+                )
+            }
+        }
+    }
 }
 
 impl Board {
@@ -258,7 +285,11 @@ impl Board {
                 };
 
                 if !self.state_valid() {
-                    self.unmake_move(is_white_turn, mv);
+                    self.walls.corners &= !(1u64 << corner_idx);
+                    match orientation {
+                        Orientation::Horizontal => self.walls.walls_above &= !(3u128 << square_idx),
+                        Orientation::Vertical => self.walls.walls_right &= !(513u128 << square_idx),
+                    }
                     return false;
                 }
 

@@ -1,11 +1,12 @@
 use crate::game::board::Board;
 use crate::game::r#move::{Move, Orientation};
+use crate::game::state::GameResult;
 use ratatui::{
-    layout::Rect,
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
     Frame,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 
 const WHITE_FG: Color = Color::Cyan;
@@ -44,18 +45,32 @@ impl GameState {
     }
 
     pub fn record_wall(&mut self, mv: Move, is_white: bool) {
-        if let Move::Wall { corner_idx, orientation } = mv {
+        if let Move::Wall {
+            corner_idx,
+            orientation,
+        } = mv
+        {
             let sq = (corner_idx / 8) as u32 * 9 + (corner_idx % 8) as u32;
             match orientation {
                 Orientation::Horizontal => {
                     let bits = 3u128 << sq;
-                    if is_white { self.white_h_walls |= bits; self.white_h_corners |= 1u64 << corner_idx; }
-                    else        { self.black_h_walls |= bits; self.black_h_corners |= 1u64 << corner_idx; }
+                    if is_white {
+                        self.white_h_walls |= bits;
+                        self.white_h_corners |= 1u64 << corner_idx;
+                    } else {
+                        self.black_h_walls |= bits;
+                        self.black_h_corners |= 1u64 << corner_idx;
+                    }
                 }
                 Orientation::Vertical => {
                     let bits = 513u128 << sq;
-                    if is_white { self.white_v_walls |= bits; self.white_v_corners |= 1u64 << corner_idx; }
-                    else        { self.black_v_walls |= bits; self.black_v_corners |= 1u64 << corner_idx; }
+                    if is_white {
+                        self.white_v_walls |= bits;
+                        self.white_v_corners |= 1u64 << corner_idx;
+                    } else {
+                        self.black_v_walls |= bits;
+                        self.black_v_corners |= 1u64 << corner_idx;
+                    }
                 }
             }
         }
@@ -104,9 +119,15 @@ fn corner_post(lower_row: usize, game_col: usize, state: &GameState) -> Span<'st
     let wv = (state.white_v_corners >> cidx) & 1 != 0;
     let bv = (state.black_v_corners >> cidx) & 1 != 0;
     if wh || bh {
-        Span::styled("-", Style::default().fg(if wh { WHITE_WALL } else { BLACK_WALL }))
+        Span::styled(
+            "-",
+            Style::default().fg(if wh { WHITE_WALL } else { BLACK_WALL }),
+        )
     } else if wv || bv {
-        Span::styled("|", Style::default().fg(if wv { WHITE_WALL } else { BLACK_WALL }))
+        Span::styled(
+            "|",
+            Style::default().fg(if wv { WHITE_WALL } else { BLACK_WALL }),
+        )
     } else {
         Span::styled(".", Style::default().fg(LABEL_FG))
     }
@@ -175,7 +196,47 @@ fn render_status(state: &GameState) -> Vec<Line<'static>> {
     ]
 }
 
-// ── public entry point ────────────────────────────────────────────────────────
+// ── public entry points ───────────────────────────────────────────────────────
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    Rect {
+        x,
+        y,
+        width: width.min(area.width),
+        height: height.min(area.height),
+    }
+}
+
+pub fn draw_success_screen(f: &mut Frame, area: Rect, state: &GameState) {
+    draw_board(f, area, state);
+
+    let (winner, color) = match (&state.board).check_result() {
+        GameResult::WhiteWins => ("White ○ wins!", WHITE_FG),
+        GameResult::BlackWins => ("Black ● wins!", BLACK_FG),
+        GameResult::InProgress => return,
+    };
+
+    let popup = centered_rect(30, 5, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::default(),
+            Line::from(Span::styled(
+                format!("  {winner}  "),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            )),
+            Line::default(),
+            Line::from(Span::styled(
+                "  Press Enter to exit  ",
+                Style::default().fg(LABEL_FG),
+            )),
+        ])
+        .block(Block::default().borders(Borders::ALL)),
+        popup,
+    );
+}
 
 pub fn draw_board(f: &mut Frame, area: Rect, state: &GameState) {
     let mut text = vec![render_header()];
@@ -190,7 +251,11 @@ pub fn draw_board(f: &mut Frame, area: Rect, state: &GameState) {
 
     text.extend(render_status(state));
 
-    let turn = if state.is_white_turn { "White ○" } else { "Black ●" };
+    let turn = if state.is_white_turn {
+        "White ○"
+    } else {
+        "Black ●"
+    };
     f.render_widget(
         Paragraph::new(text).block(
             Block::default()
