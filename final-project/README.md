@@ -37,7 +37,7 @@ Append the evaluator name directly after the depth. Defaults to `simple` if omit
 
 ```bash
 # Human (white) vs alpha-beta depth 5, simple evaluator (default)
-cargo run -- human ab5
+cargo run -- human ab5 2>debug.log
 
 # Human vs alpha-beta depth 7, urgent evaluator, optimized build
 cargo run --release -- human ab7urgent

@@ -8,20 +8,27 @@ use crate::game::r#move::Move;
 use crate::game::player::Player;
 use crate::game::state::GameResult;
 
-pub struct ParallelAlphaBetaBot<E: Evaluator> {
+pub struct PABExtendBot<E: Evaluator> {
     depth: u8,
     evaluator: E,
+    extend: u8,
 }
 
-impl<E: Evaluator> ParallelAlphaBetaBot<E> {
+impl<E: Evaluator> PABExtendBot<E> {
     pub(crate) fn new(depth: u8, evaluator: E) -> Self {
-        ParallelAlphaBetaBot { depth, evaluator }
+        PABExtendBot {
+            depth,
+            evaluator,
+            extend: 8,
+        }
     }
 }
 
 // E: Sync so &self (carrying the evaluator) can be shared across rayon threads.
-impl<E: Evaluator + Sync> Player for ParallelAlphaBetaBot<E> {
+impl<E: Evaluator + Sync> Player for PABExtendBot<E> {
     fn get_move(&mut self, board: &Board, is_white: bool) -> Move {
+        let (wd, bd) = board.distances();
+        eprintln!("[bot] white_dist={wd} black_dist={bd}  walls w={} b={}", board.white_walls_remaining(), board.black_walls_remaining());
         let moves: Vec<Move> = board
             .get_available_candidate_moves(is_white)
             .into_iter()
@@ -73,7 +80,7 @@ fn search_root_move<E: Evaluator + Sync>(
     mv: Move,
     board: &Board,
     is_white: bool,
-    bot: &ParallelAlphaBetaBot<E>,
+    bot: &PABExtendBot<E>,
     shared_alpha: &AtomicI32,
     shared_beta: &AtomicI32,
 ) -> Option<(Move, i32)> {
@@ -90,6 +97,8 @@ fn search_root_move<E: Evaluator + Sync>(
         &mut local_board,
         !is_white,
         bot.depth - 1,
+        false,
+        false,
         alpha,
         beta,
         shared_alpha,
@@ -103,12 +112,16 @@ fn search_root_move<E: Evaluator + Sync>(
     Some((mv, eval))
 }
 
-impl<E: Evaluator + Sync> ParallelAlphaBetaBot<E> {
+impl<E: Evaluator + Sync> PABExtendBot<E> {
     fn get_eval(
         &self,
         board: &mut Board,
         is_white: bool,
         depth: u8,
+        // Per-player flags: true once that player's zero-wall state has triggered an
+        // extension on this path. Guards against re-extending for the same player.
+        white_ext: bool,
+        black_ext: bool,
         mut alpha: i32,
         mut beta: i32,
         global_alpha: &AtomicI32,
@@ -120,13 +133,49 @@ impl<E: Evaluator + Sync> ParallelAlphaBetaBot<E> {
             return if is_white { alpha } else { beta };
         }
 
-        let result: GameResult = board.check_result();
-        match result {
-            GameResult::WhiteWins => return i32::MAX - 512 + (depth as i32) * 10,
-            GameResult::BlackWins => return i32::MIN + 512 - (depth as i32) * 10,
+        // Check terminals before depth==0 so a win/loss is never scored as eval.
+        // Two objectives encoded in the score (depth dominates, distance breaks ties):
+        //   1. Prefer faster wins (higher remaining depth = fewer moves played).
+        //   2. Even in a loss, the losing player prefers to be closer to its own goal.
+        match board.check_result() {
+            GameResult::WhiteWins => {
+                let (_, black_dist) = board.distances();
+                return i32::MAX - (8192 - (depth as i32) * 16) + black_dist as i32;
+            }
+            GameResult::BlackWins => {
+                let (white_dist, _) = board.distances();
+                return i32::MIN + (8192 - (depth as i32) * 16) - white_dist as i32;
+            }
             _ => {}
         }
+
         if depth == 0 {
+            // Quiescence extension: at each leaf, check for newly-discovered zero-wall
+            // players. Extend by self.extend per new player (max 2 extensions total,
+            // once per player). white/black_walls_remaining() are O(1) field reads.
+            let new_white = !white_ext && board.white_walls_remaining() == 0;
+            let new_black = !black_ext && board.black_walls_remaining() == 0;
+            let ext_depth = (new_white && new_black) as u8 * self.extend;
+            if ext_depth > 0 {
+                // Resync with global bounds before entering the extension — other rayon
+                // threads may have tightened the window since we entered this call.
+                alpha = alpha.max(global_alpha.load(Ordering::Relaxed));
+                beta = beta.min(global_beta.load(Ordering::Relaxed));
+                if beta <= alpha {
+                    return if is_white { alpha } else { beta };
+                }
+                return self.get_eval(
+                    board,
+                    is_white,
+                    ext_depth,
+                    true,
+                    true,
+                    alpha,
+                    beta,
+                    global_alpha,
+                    global_beta,
+                );
+            }
             return self.evaluator.eval(board, is_white);
         }
 
@@ -139,7 +188,9 @@ impl<E: Evaluator + Sync> ParallelAlphaBetaBot<E> {
             let eval = self.get_eval(
                 board,
                 !is_white,
-                depth - 1,
+                if depth == 0 { depth } else { depth - 1 },
+                white_ext,
+                black_ext,
                 alpha,
                 beta,
                 global_alpha,

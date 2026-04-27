@@ -5,7 +5,7 @@ mod ui;
 use std::io;
 
 use ai::bot::{
-    alpha_beta_bot::AlphaBetaBot, minimax_bot::MiniMaxBot,
+    alpha_beta_bot::AlphaBetaBot, minimax_bot::MiniMaxBot, pab_extend_bot::PABExtendBot,
     parallelized_alpha_beta_bot::ParallelAlphaBetaBot, random_bot::RandomBot,
 };
 use ai::evalulator::{BaseEvaluator, SimpleEvaluator, UrgentEvaluator};
@@ -87,6 +87,14 @@ fn make_player(s: &str) -> Box<dyn Player> {
             "base" => Box::new(AlphaBetaBot::new(depth, BaseEvaluator::new())),
             "urgent" => Box::new(AlphaBetaBot::new(depth, UrgentEvaluator::new())),
             _ => Box::new(AlphaBetaBot::new(depth, SimpleEvaluator::new())),
+        };
+    }
+    if let Some(rest) = s.strip_prefix("e") {
+        let (depth, eval) = parse_depth_eval(rest, "e");
+        return match eval {
+            "base" => Box::new(PABExtendBot::new(depth, BaseEvaluator::new())),
+            "urgent" => Box::new(PABExtendBot::new(depth, UrgentEvaluator::new())),
+            _ => Box::new(PABExtendBot::new(depth, SimpleEvaluator::new())),
         };
     }
     if let Some(rest) = s.strip_prefix("p") {
